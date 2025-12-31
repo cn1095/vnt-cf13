@@ -6,7 +6,7 @@ import { ENCRYPTION_RESERVED } from './constants.js';
  */  
 export class RsaCipher {  
   constructor(privateKeyDer, publicKeyDer) {  
-    this.privateKeyDer = privateKeyKeyDer;  
+    this.privateKeyDer = privateKeyDer;  
     this.publicKeyDer = publicKeyDer;  
     this.finger = this.calculateFinger(publicKeyDer);  
   }  
