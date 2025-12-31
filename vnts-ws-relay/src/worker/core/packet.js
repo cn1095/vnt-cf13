@@ -198,3 +198,56 @@ export class NetPacket {
     return true;  
   }  
 }
+
+set_protocol(protocol) {  
+  const buffer = this._getArrayBuffer();  
+  const view = new DataView(buffer);  
+  view.setUint8(1, protocol);  
+  this.protocol = protocol;  
+}  
+  
+set_transport_protocol(transportProtocol) {  
+  const buffer = this._getArrayBuffer();  
+  const view = new DataView(buffer);  
+  view.setUint8(2, transportProtocol);  
+  this.transportProtocol = transportProtocol;  
+}  
+  
+set_source(source) {  
+  const buffer = this._getArrayBuffer();  
+  const view = new DataView(buffer);  
+  view.setUint32(5, source, true); // little endian  
+  this.source = source;  
+}  
+  
+set_destination(destination) {  
+  const buffer = this._getArrayBuffer();  
+  const view = new DataView(buffer);  
+  view.setUint32(9, destination, true); // little endian  
+  this.destination = destination;  
+}  
+  
+set_payload(payload) {  
+  const dataStart = 13; // PACKET_HEADER_SIZE  
+  if (this.data.length < dataStart + payload.length) {  
+    throw new Error('Insufficient space for payload');  
+  }  
+    
+  // 复制 payload 数据  
+  const dataArray = this.data instanceof Uint8Array ? this.data : new Uint8Array(this.data);  
+  dataArray.set(payload, dataStart);  
+  this.data = dataArray;  
+}  
+  
+set_gateway_flag(isGateway) {  
+  const buffer = this._getArrayBuffer();  
+  const view = new DataView(buffer);  
+  const currentFlags = view.getUint16(2, true);  
+    
+  if (isGateway) {  
+    view.setUint16(2, currentFlags | 0x40, true); // 设置网关标志  
+  } else {  
+    view.setUint16(2, currentFlags & ~0x40, true); // 清除网关标志  
+  }  
+  this.flags = view.getUint16(2, true);  
+}
