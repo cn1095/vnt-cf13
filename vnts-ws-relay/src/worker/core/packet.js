@@ -40,26 +40,26 @@ export class NetPacket {
   
   // 新增：快速解析头部方法  
   static fastParse(buffer) {  
-    if (!buffer || buffer.length < 12) {  
-      throw new Error("Packet too short for fast parsing");  
-    }  
-  
-    const packet = new NetPacket(buffer);  
-    packet.fastParseHeader();  
-    return packet;  
+  if (!buffer || buffer.length < 12) {  
+    throw new Error("Packet too short for fast parsing");  
   }  
+  
+  const packet = new NetPacket(buffer);  
+  packet.fastParseHeader();  
+  return packet;  
+} 
   
   // 新增：快速头部解析  
   fastParseHeader() {  
-    const view = new DataView(this.data.buffer || this.data);  
-      
-    // 只解析必要的字段用于路由判断  
-    this.protocol = view.getUint8(1);  
-    this.transportProtocol = view.getUint8(2);  
-    this.source = view.getUint32(4, false);  
-    this.destination = view.getUint32(8, false);  
-    this.offset = 12;  
-  }  
+  const view = new DataView(this.data.buffer || this.data);  
+    
+  // 只解析必要的字段用于路由判断  
+  this.protocol = view.getUint8(1);  
+  this.transportProtocol = view.getUint8(2);  
+  this.source = view.getUint32(4, false);  // 大端序  
+  this.destination = view.getUint32(8, false);  // 大端序  
+  this.offset = 12;  
+} 
   
   parseHeader() {  
     // 安全检查：确保数据存在且类型正确  
