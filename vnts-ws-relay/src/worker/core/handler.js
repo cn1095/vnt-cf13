@@ -830,27 +830,27 @@ getCurrentEpoch() {
     }
   }
 
-  createHandshakeResponse(request) {
-    const clientVersion = request.version || "1.2.16";
-
-    const responseData = {
-      version: clientVersion,
-      secret: false,
-      public_key: new Uint8Array(0),
-      key_finger: "",
-    };
-
-    const responseBytes = this.encodeHandshakeResponse(responseData);
-
-    // 使用普通数据包而不是加密数据包
-    const response = NetPacket.new(responseBytes.length);
-
-    response.set_protocol(PROTOCOL.SERVICE);
-    response.set_transport_protocol(TRANSPORT_PROTOCOL.HandshakeResponse);
-    response.set_payload(responseBytes);
-
-    return response;
-  }
+  createHandshakeResponse(request) {  
+    const clientVersion = request.version || "1.2.16";  
+  
+    const responseData = {  
+        version: clientVersion,  
+        secret: false,  
+        public_key: new Uint8Array(0),  
+        key_finger: "",  
+    };  
+  
+    const responseBytes = this.encodeHandshakeResponse(responseData);  
+  
+    // 使用普通数据包而不是加密数据包  
+    const response = NetPacket.new(responseBytes.length);  
+  
+    response.set_protocol(PROTOCOL.SERVICE);  
+    response.set_transport_protocol(TRANSPORT_PROTOCOL.HandshakeResponse);  
+    response.set_payload(responseBytes);  // 这里应该正确工作  
+  
+    return response;  
+}
 
   createRegistrationResponse(virtualIp, networkInfo) {
     const responseData = {

@@ -6,6 +6,27 @@ export class NetPacket {
     this.offset = 0;  
   }  
   
+  // 新增：轻量级头部解析方法  
+  static parseHeader(buffer) {  
+    if (!buffer || buffer.length < 12) {  
+      throw new Error("Packet too short for header parsing");  
+    }  
+  
+    const view = new DataView(buffer.buffer || buffer);  
+      
+    return {  
+      version: view.getUint8(0) & 0x0f,  
+      flags: (view.getUint8(0) & 0xf0) >> 4,  
+      protocol: view.getUint8(1),  
+      transportProtocol: view.getUint8(2),  
+      ttl: view.getUint8(3),  
+      source: view.getUint32(4, false),  // 大端序  
+      destination: view.getUint32(8, false),  // 大端序  
+      offset: 12  
+    };  
+  }  
+  
+  // 保留完整解析方法用于复杂协议处理  
   static parse(buffer) {  
     // 安全检查：确保输入有效  
     if (!buffer) {  
@@ -23,7 +44,6 @@ export class NetPacket {
       buffer instanceof Uint8Array ? buffer.length : buffer.byteLength;  
   
     if (length < 12) {  
-      // VNT header is 12 bytes  
       throw new Error(  
         `Packet too short: ${length} bytes, minimum 12 bytes required`  
       );  
@@ -37,29 +57,6 @@ export class NetPacket {
       throw new Error(`Failed to parse VNT packet: ${error.message}`);  
     }  
   }  
-  
-  // 新增：快速解析头部方法  
-  static fastParse(buffer) {  
-  if (!buffer || buffer.length < 12) {  
-    throw new Error("Packet too short for fast parsing");  
-  }  
-  
-  const packet = new NetPacket(buffer);  
-  packet.fastParseHeader();  
-  return packet;  
-} 
-  
-  // 新增：快速头部解析  
-  fastParseHeader() {  
-  const view = new DataView(this.data.buffer || this.data);  
-    
-  // 只解析必要的字段用于路由判断  
-  this.protocol = view.getUint8(1);  
-  this.transportProtocol = view.getUint8(2);  
-  this.source = view.getUint32(4, false);  // 大端序  
-  this.destination = view.getUint32(8, false);  // 大端序  
-  this.offset = 12;  
-} 
   
   parseHeader() {  
     // 安全检查：确保数据存在且类型正确  
@@ -128,22 +125,7 @@ export class NetPacket {
     }  
   }  
   
-  protocol() {  
-    return this.protocol;  
-  }  
-  
-  transport_protocol() {  
-    return this.transportProtocol;  
-  }  
-  
-  source() {  
-    return this.source;  
-  }  
-  
-  destination() {  
-    return this.destination;  
-  }  
-  
+  // 移除冲突的方法定义，只保留属性访问  
   payload() {  
     return this.data.slice(this.offset);  
   }  
@@ -223,6 +205,28 @@ export class NetPacket {
     return new NetPacket(buffer);  
   }  
   
+  // 新增：快速创建方法  
+  static createFast(protocol, transportProtocol, source, destination, payload = new Uint8Array(0)) {  
+    const headerSize = 12;  
+    const buffer = new Uint8Array(headerSize + payload.length);  
+  
+    const view = new DataView(buffer.buffer);  
+    view.setUint8(0, 2);  
+    view.setUint8(1, protocol);  
+    view.setUint8(2, transportProtocol);  
+    view.setUint8(3, 0x60);  
+  
+    // 直接调用静态方法  
+    const sourceBytes = NetPacket.intToIpv4Bytes(source);  
+    const destBytes = NetPacket.intToIpv4Bytes(destination);  
+      
+    buffer.set(sourceBytes, 4);  
+    buffer.set(destBytes, 8);  
+    buffer.set(payload, headerSize);  
+  
+    return buffer;  
+  }  
+  
   // 安全获取 ArrayBuffer 的辅助方法  
   _getArrayBuffer() {  
     if (!this.data) {  
@@ -267,7 +271,7 @@ export class NetPacket {
     return true;  
   }  
   
-  // 设置方法 - 移到类内部  
+  // 设置方法  
   set_protocol(protocol) {  
     const buffer = this._getArrayBuffer();  
     const view = new DataView(buffer);  
@@ -297,8 +301,7 @@ export class NetPacket {
     const buffer = this._getArrayBuffer();  
     const view = new DataView(buffer);  
   
-    // 关键修复：使用正确的字节顺序和偏移  
-    // VNT 协议中地址存储在字节 8-11  
+    // 使用正确的字节顺序和偏移  
     const destBytes = this.intToIpv4Bytes(destination);  
   
     console.log(`[DEBUG] Setting destination bytes: [${destBytes.join(", ")}]`);  
@@ -310,30 +313,6 @@ export class NetPacket {
     view.setUint8(11, destBytes[3]);  
   
     this.destination = destination;  
-  
-    // 验证完整的包头  
-    const header = [];  
-    for (let i = 0; i < 12; i++) {  
-      header.push(view.getUint8(i));  
-    }  
-    console.log(`[DEBUG] Complete header: [${header.join(", ")}]`);  
-  }  
-  
-  set_source(source) {  
-    const buffer = this._getArrayBuffer();  
-    const view = new DataView(buffer);  
-  
-    // 源地址存储在字节 4-7  
-    const sourceBytes = this.intToIpv4Bytes(source);  
-  
-    console.log(`[DEBUG] Setting source bytes: [${sourceBytes.join(", ")}]`);  
-  
-    view.setUint8(4, sourceBytes[0]);  
-    view.setUint8(5, sourceBytes[1]);  
-    view.setUint8(6, sourceBytes[2]);  
-    view.setUint8(7, sourceBytes[3]);  
-  
-    this.source = source;  
   }  
   
   set_payload(payload) {  
@@ -364,13 +343,18 @@ export class NetPacket {
     this.flags = (view.getUint8(0) & 0xf0) >> 4;  
   }  
   
-  intToIpv4Bytes(ipInt) {  
+  // 静态方法：IP地址转换  
+  static intToIpv4Bytes(ipInt) {  
     return [  
       (ipInt >> 24) & 0xff,  
       (ipInt >> 16) & 0xff,  
       (ipInt >> 8) & 0xff,  
       ipInt & 0xff,  
     ];  
+  }  
+  
+  intToIpv4Bytes(ipInt) {  
+    return NetPacket.intToIpv4Bytes(ipInt);  
   }  
   
   set_default_version() {  
