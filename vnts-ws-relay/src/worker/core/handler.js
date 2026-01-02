@@ -211,15 +211,18 @@ export class PacketHandler {
       if (!ipv4Packet) {
         return null;
       }
+      console.log(`[调试] IPv4包: 协议=${ipv4Packet.protocol}, 目标=${this.formatIp(destination)}, 网关=${this.formatIp(context.link_context.network_info.gateway)}`);
 
       // 检查是否是 ICMP ping 包
       if (
         ipv4Packet.protocol === 1 &&
         destination === context.link_context.network_info.gateway
       ) {
+      console.log(`[调试] 检测到ICMP ping包`); 
         const icmpPacket = this.parseIcmpPacket(ipv4Packet.payload);
 
         if (icmpPacket && icmpPacket.type === 8) {
+        console.log(`[调试] 创建ICMP Echo Reply`); 
           // 创建 ICMP Echo Reply
           return this.createPingResponse(
             packet,
@@ -587,7 +590,7 @@ export class PacketHandler {
 
       // 创建客户端信息
       const clientInfo = new ClientInfo({
-        virtual_ip: virtualIp,
+        virtualIp: virtualIp,
         device_id: registrationReq.device_id,
         name: registrationReq.name,
         version: registrationReq.version,
@@ -860,6 +863,12 @@ export class PacketHandler {
   }
 
   createRegistrationResponse(virtualIp, networkInfo) {
+  	console.log(`[调试] 当前网络客户端数量: ${networkInfo.clients.size}`);  
+  console.log(`[调试] 本机IP: ${this.formatIp(virtualIp)}`);
+  // 打印所有客户端信息  
+  for (const [ip, client] of networkInfo.clients) {  
+    console.log(`[调试] 客户端 IP: ${this.formatIp(ip)}, 在线: ${client.online}`);  
+  }
     const responseData = {
       virtual_ip: virtualIp,
       virtual_gateway: networkInfo.gateway,
@@ -871,7 +880,7 @@ export class PacketHandler {
       .map((client) => ({  
         name: client.name,  
         virtual_ip: client.virtual_ip,  
-        device_status: client.online ? 1 : 0, // 离线显示为 0  
+        device_status: client.online ? 0 : 1, // 离线显示为 1  
         client_secret: false,  
         client_secret_hash: new Uint8Array(0),  
         wireguard: false,  
