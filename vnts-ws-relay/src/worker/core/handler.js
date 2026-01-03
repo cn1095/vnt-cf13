@@ -664,8 +664,8 @@ export class PacketHandler {
         name: client.name,
         virtual_ip: client.virtual_ip,
         device_status: client.online ? 0 : 1,
-        client_secret: false,
-        client_secret_hash: new Uint8Array(0),
+        client_secret: client.client_secret, // 保留原始值
+        client_secret_hash: client.client_secret_hash, // 保留原始值
         wireguard: false,
       }));
 
@@ -712,7 +712,11 @@ export class PacketHandler {
       const payload = packet.payload();
       const registrationReq = this.parseRegistrationRequest(payload);
       logger.info(
-        `[注册-请求] 解析注册请求，设备ID: ${registrationReq.device_id}, 名称: ${registrationReq.name}`
+        `[注册-请求] 解析注册请求，设备ID: ${
+          registrationReq.device_id
+        }, 名称: ${registrationReq.name}，加密状态: ${
+          registrationReq.client_secret
+        }, hash长度: ${registrationReq.client_secret_hash?.length || 0}`
       );
 
       // 获取客户端请求的IP
@@ -764,7 +768,9 @@ export class PacketHandler {
         version: registrationReq.version,
         online: true,
         address: addr,
-        client_secret_hash: registrationReq.client_secret_hash,
+        client_secret: registrationReq.client_secret || false, // 添加这行
+        client_secret_hash:
+          registrationReq.client_secret_hash || new Uint8Array(0),
         tcp_sender: tcpSender,
         timestamp: Date.now(),
       });
@@ -1105,8 +1111,8 @@ export class PacketHandler {
         name: client.name,
         virtual_ip: client.virtual_ip,
         device_status: client.online ? 0 : 1,
-        client_secret: false,
-        client_secret_hash: new Uint8Array(0),
+        client_secret: client.client_secret, // 保留原始值
+        client_secret_hash: client.client_secret_hash, // 保留原始值
         wireguard: false,
       }));
     // logger.debug(`[注册响应-客户端] 过滤后客户端数量: ${clientInfoList.length}`);
@@ -1275,6 +1281,7 @@ export class PacketHandler {
       // 如果第一个客户端指定了IP，根据其更新网段
       if (requestedIp !== 0) {
         network = requestedIp & netmask;
+        gateway = network | 1;
         logger.info(
           `[网络信息-网段] 客户端指定了IP，更新网段 - 网关: ${this.formatIp(
             gateway

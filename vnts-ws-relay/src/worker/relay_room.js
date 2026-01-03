@@ -178,7 +178,8 @@ export class RelayRoom {
     const url = new URL(request.url);
     // logger.debug(`处理请求: ${url.pathname}`);
 
-    if (url.pathname === "/ws") {
+    const wsPath = "/" + this.env.WS_PATH || "/ws";
+if (url.pathname === wsPath) {
       logger.debug(`WebSocket连接请求，开始处理`);
       return this.handleWebSocket(request);
     }

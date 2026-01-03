@@ -51,15 +51,15 @@ export class RsaCipher {
       const privateKey = await crypto.subtle.importKey(
         "pkcs8",
         this.privateKeyDer,
-        { name: "RSA-OAEP", hash: "SHA-256" },
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
         false,
         ["decrypt"]
       );
 
       // 解密数据
-      logger.debug(`[RSA解密-处理] 执行RSA-OAEP解密`);
+      logger.debug(`[RSA解密-处理] 执行RSA解密`);
       const decryptedData = await crypto.subtle.decrypt(
-        { name: "RSA-OAEP" },
+        { name: "RSASSA-PKCS1-v1_5" },
         privateKey,
         netPacket.payload()
       );
@@ -133,14 +133,14 @@ export class RsaCipher {
     const publicKey = await crypto.subtle.importKey(
       "spki",
       this.publicKeyDer,
-      { name: "RSA-OAEP", hash: "SHA-256" },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["encrypt"]
     );
 
-    logger.debug(`[RSA加密-处理] 执行RSA-OAEP加密`);
+    logger.debug(`[RSA加密-处理] 执行RSA加密`);
     const encryptedData = await crypto.subtle.encrypt(
-      { name: "RSA-OAEP" },
+      { name: "RSASSA-PKCS1-v1_5" },
       publicKey,
       secretBody.buffer()
     );
@@ -505,7 +505,7 @@ export async function generateRsaKeyPair() {
   try {
     const keyPair = await crypto.subtle.generateKey(
       {
-        name: "RSA-OAEP",
+        name: "RSASSA-PKCS1-v1_5",
         modulusLength: 2048,
         publicExponent: new Uint8Array([1, 0, 1]),
         hash: "SHA-256",
