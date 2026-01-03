@@ -1,6 +1,32 @@
 import { ENCRYPTION_RESERVED } from "./constants.js";
 import { RsaWasm } from "./rsa_wasm.js";
+import initWasm from "./rsa_wasm.js";
 import { logger } from "./logger.js";
+
+
+// WASM 初始化 promise  
+let wasmInitialized = false;  
+const wasmInitPromise = (async () => {  
+  try {  
+    // 检测 Cloudflare Workers 环境  
+    const isCloudflareWorkers = typeof globalThis !== 'undefined' &&   
+      (globalThis.Request || globalThis.WebSocket);  
+      
+    if (isCloudflareWorkers) {  
+      // Cloudflare Workers 环境使用字符串路径  
+      await initWasm({ module_or_path: './rsa_wasm_bg.wasm' });  
+    } else {  
+      // 标准环境使用 URL 对象  
+      await initWasm();  
+    }  
+      
+    wasmInitialized = true;  
+    logger.debug(`[WASM-初始化] WebAssembly模块加载成功`);  
+  } catch (error) {  
+    logger.error(`[WASM-初始化] WebAssembly模块加载失败: ${error.message}`);  
+    throw error;  
+  }  
+})();
 
 /**
  * RSA 加密器
@@ -17,14 +43,21 @@ export class RsaCipher {
     this.initRsaWasm();  
   }  
   
-  async initRsaWasm() {  
+   async initRsaWasm() {  
     try {  
+      // 等待 WASM 初始化完成  
+      await wasmInitPromise;  
+        
+      // 创建 RsaWasm 实例  
+      this.rsaWasm = new RsaWasm();  
       this.rsaWasm.set_private_key(this.privateKeyDer);  
-      logger.debug(`[RSA-WASM] WebAssembly RSA解密器初始化成功`);  
+      this.rsaWasm.set_public_key(this.publicKeyDer);  
+      logger.debug(`[RSA-WASM] WebAssembly RSA加密解密器初始化成功`);  
     } catch (error) {  
       logger.error(`[RSA-WASM] WebAssembly初始化失败: ${error.message}`);  
+      throw error;  
     }  
-  }
+  }  
   
   async initFinger(publicKeyDer) {  
     this.fingerValue = await this.calculateFinger(publicKeyDer);  
@@ -107,65 +140,52 @@ export class RsaCipher {
    * RSA 加密
    * 基于 vnt_s/vnt/vnt/src/cipher/rsa_cipher.rs:69-111 实现
    */
-  async encrypt(netPacket) {
-    logger.debug(`[RSA加密-开始] 开始RSA加密操作`);
-    if (netPacket.reserve() < 256) {
-      logger.error(`[RSA加密-错误] 数据包预留空间不足，需要256字节`);
-      // RSA_ENCRYPTION_RESERVED
-      throw new Error("too short");
-    }
-
-    const dataLen = netPacket.data_len() + 256;
-    netPacket.set_data_len(dataLen);
-    logger.debug(`[RSA加密-准备] 数据包长度调整为: ${dataLen}字节`);
-
-    const nonceRaw = this.buildNonceRaw(netPacket);
-    const secretBody = new RsaSecretBody(netPacket.payload_mut());
-
-    // 设置随机数
-    logger.debug(`[RSA加密-随机数] 生成64字节随机数`);
-    const random = new Uint8Array(64);
-    crypto.getRandomValues(random);
-    secretBody.set_random(random);
-
-    // 计算指纹
-    logger.debug(`[RSA加密-指纹] 计算数据指纹`);
-    const hasher = await crypto.subtle.digest(
-      "SHA-256",
-      new Uint8Array([...secretBody.body(), ...nonceRaw])
-    );
-    const hashArray = new Uint8Array(hasher);
-    secretBody.set_finger(hashArray.slice(16));
-
-    // 导入公钥并加密
-    logger.debug(`[RSA加密-密钥] 导入RSA公钥`);
-    const publicKey = await crypto.subtle.importKey(
-      "spki",
-      this.publicKeyDer,
-      { name: "RSAES-PKCS1-v1_5" },
-      false,
-      ["encrypt"]
-    );
-
-    logger.debug(`[RSA加密-处理] 执行RSA-PKCS1v15加密`);
-    const encryptedData = await crypto.subtle.encrypt(
-      "RSAES-PKCS1-v1_5",
-      publicKey,
-      secretBody.buffer()
-    );
-
-    // 创建新的数据包
-    const newPacket = NetPacket.new(
-      new Uint8Array(12 + encryptedData.byteLength)
-    );
-    newPacket.buffer_mut().set(netPacket.buffer().slice(0, 12), 0);
-    newPacket.set_payload(new Uint8Array(encryptedData));
-    logger.debug(
-      `[RSA加密-成功] RSA加密完成，密文长度: ${encryptedData.byteLength}字节`
-    );
-
-    return newPacket;
-  }
+  async encrypt(netPacket) {  
+  logger.debug(`[RSA加密-开始] 开始RSA加密操作`);  
+  if (netPacket.reserve() < 256) {  
+    logger.error(`[RSA加密-错误] 数据包预留空间不足，需要256字节`);  
+    // RSA_ENCRYPTION_RESERVED  
+    throw new Error("too short");  
+  }  
+  
+  const dataLen = netPacket.data_len() + 256;  
+  netPacket.set_data_len(dataLen);  
+  logger.debug(`[RSA加密-准备] 数据包长度调整为: ${dataLen}字节`);  
+  
+  const nonceRaw = this.buildNonceRaw(netPacket);  
+  const secretBody = new RsaSecretBody(netPacket.payload_mut());  
+  
+  // 设置随机数  
+  logger.debug(`[RSA加密-随机数] 生成64字节随机数`);  
+  const random = new Uint8Array(64);  
+  crypto.getRandomValues(random);  
+  secretBody.set_random(random);  
+  
+  // 计算指纹  
+  logger.debug(`[RSA加密-指纹] 计算数据指纹`);  
+  const hasher = await crypto.subtle.digest(  
+    "SHA-256",  
+    new Uint8Array([...secretBody.body(), ...nonceRaw])  
+  );  
+  const hashArray = new Uint8Array(hasher);  
+  secretBody.set_finger(hashArray.slice(16));  
+  
+  // 使用 WASM 进行 PKCS1v15 加密  
+  logger.debug(`[RSA加密-WASM] 使用WebAssembly进行PKCS1v15加密`);  
+  const encryptedData = this.rsaWasm.encrypt_pkcs1v15(secretBody.buffer());  
+  
+  // 创建新的数据包  
+  const newPacket = NetPacket.new(  
+    new Uint8Array(12 + encryptedData.length)  
+  );  
+  newPacket.buffer_mut().set(netPacket.buffer().slice(0, 12), 0);  
+  newPacket.set_payload(new Uint8Array(encryptedData));  
+  logger.debug(  
+    `[RSA加密-成功] RSA加密完成，密文长度: ${encryptedData.length}字节`  
+  );  
+  
+  return newPacket;  
+}
 
   buildNonceRaw(netPacket) {
     const nonceRaw = new Uint8Array(12);
